@@ -57,6 +57,7 @@ class DriftIssue:
     old_name: Optional[str] = None
     new_name: Optional[str] = None
     suggestion: str = ""   # Suggested fix
+    proposed_sentence: Optional[str] = None  # Exact sentence with fix applied
     details: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -76,6 +77,8 @@ class DriftIssue:
             },
             "suggestion": self.suggestion,
         }
+        if self.proposed_sentence is not None:
+            data["proposed_sentence"] = self.proposed_sentence
         if self.old_value is not None:
             data["old_value"] = self.old_value
         if self.new_value is not None:
@@ -269,6 +272,44 @@ def check_value_in_text(val: str, text: str) -> bool:
     return bool(re.search(rf"\b{escaped_v}\b", text, re.IGNORECASE) or clean_v.lower() in text.lower())
 
 
+def generate_proposed_sentence(
+    sentence: str,
+    old_token: Optional[str],
+    new_token: Optional[str]
+) -> Optional[str]:
+    """Generates the corrected sentence by replacing old_token with new_token."""
+    if not sentence or not old_token or not new_token:
+        return None
+    old_clean = old_token.strip("'\"")
+    new_clean = new_token.strip("'\"")
+    if not old_clean or not new_clean or old_clean == new_clean:
+        return None
+
+    # CLI flag or hyphenated token: (--old-flag)
+    if old_clean.startswith("-"):
+        escaped = re.escape(old_clean)
+        flag_pattern = rf"(?:(?<=[\s`\"'])|^){escaped}(?=[\s`\"':,.]|$)"
+        if re.search(flag_pattern, sentence):
+            return re.sub(flag_pattern, new_clean, sentence, count=1)
+        if old_clean in sentence:
+            return sentence.replace(old_clean, new_clean, 1)
+
+    # Exact boundary regex first
+    escaped = re.escape(old_clean)
+    if re.search(rf"\b{escaped}\b", sentence):
+        return re.sub(rf"\b{escaped}\b", new_clean, sentence, count=1)
+
+    # Case-insensitive boundary regex
+    if re.search(rf"\b{escaped}\b", sentence, re.IGNORECASE):
+        return re.sub(rf"\b{escaped}\b", new_clean, sentence, count=1, flags=re.IGNORECASE)
+
+    # Substring replacement fallback
+    if old_clean in sentence:
+        return sentence.replace(old_clean, new_clean, 1)
+
+    return None
+
+
 def detect_drift_for_change(
     change: CodeChange,
     doc_matches: List[DocMatch]
@@ -308,6 +349,7 @@ def detect_drift_for_change(
                 # High confidence: exact name or variant + old value confirmed
                 confidence = "HIGH"
                 suggestion = f"Update default value from '{old_val}' to '{new_val}'"
+                proposed = generate_proposed_sentence(sentence, old_val, new_val)
                 issues.append(
                     DriftIssue(
                         issue_type="DEFAULT_VALUE_CHANGED",
@@ -321,6 +363,7 @@ def detect_drift_for_change(
                         old_value=old_val,
                         new_value=new_val,
                         suggestion=suggestion,
+                        proposed_sentence=proposed,
                         details={"matched_variant": match.matched_variant}
                     )
                 )
@@ -339,6 +382,7 @@ def detect_drift_for_change(
             if old_name.lower() in match.line_content.lower():
                 confidence = "HIGH" if old_name.startswith("-") else "MEDIUM"
                 suggestion = f"Rename flag/key '{old_name}' to '{new_name}'"
+                proposed = generate_proposed_sentence(sentence, old_name, new_name)
                 issues.append(
                     DriftIssue(
                         issue_type="FLAG_RENAMED",
@@ -352,6 +396,7 @@ def detect_drift_for_change(
                         old_name=old_name,
                         new_name=new_name,
                         suggestion=suggestion,
+                        proposed_sentence=proposed,
                         details=change.details
                     )
                 )
@@ -376,10 +421,15 @@ def detect_drift_for_change(
 
             if found_removed_p or found_old_default:
                 confidence = "HIGH"
+                proposed = None
                 if found_removed_p:
                     suggestion = f"Remove parameter(s) '{', '.join(found_removed_p)}' from documentation or signature"
                 else:
                     suggestion = f"Update parameter defaults: {', '.join(default_details)}"
+                    for p_name, (old_def, new_def) in modified_defaults.items():
+                        proposed = generate_proposed_sentence(sentence, old_def, new_def)
+                        if proposed:
+                            break
 
                 issues.append(
                     DriftIssue(
@@ -394,6 +444,7 @@ def detect_drift_for_change(
                         old_value=change.old_value,
                         new_value=change.new_value,
                         suggestion=suggestion,
+                        proposed_sentence=proposed,
                         details={
                             "removed_params": found_removed_p,
                             "modified_defaults": modified_defaults
