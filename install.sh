@@ -57,3 +57,4 @@ echo "    docdrift --base main --head your-branch --ai"
 echo ""
 echo "  Run 'docdrift --help' for all options."
 echo ""
+
