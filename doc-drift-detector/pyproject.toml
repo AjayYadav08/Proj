@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "docdrift"
+version = "1.0.0"
+description = "Catch documentation drift in Pull Requests — static + AI hybrid"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["documentation", "drift", "git", "pr", "devops", "ci"]
+dependencies = [
+    "colorama>=0.4.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+]
+
+[project.scripts]
+docdrift = "drift_detector:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["detectors*", "utils*", "ai*"]
+
+[tool.setuptools.package-dir]
+"" = "."
