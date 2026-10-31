@@ -114,3 +114,4 @@ class OllamaClient:
                 return message.get("content", "").strip()
         except Exception:
             return None
+

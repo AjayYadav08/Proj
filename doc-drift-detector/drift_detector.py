@@ -43,16 +43,6 @@ from utils.doc_finder import (
 from utils.reporter import DriftReporter
 
 
-def run_pipeline(
-    diff_text: str,
-    repo_dir: str = ".",
-    docs_dir: Optional[str] = None,
-    min_confidence: str = "medium",
-    verbose: bool = False
-) -> Tuple_Results:
-    pass
-
-
 # Typed container for analysis results
 class PipelineResult:
     def __init__(

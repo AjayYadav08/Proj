@@ -27,17 +27,18 @@ class VerificationResult:
 
 
 SYSTEM_PROMPT = """You are an expert Documentation Drift Verification Agent.
-Your job is to determine whether a given documentation sentence is rendered factually out-of-date,
-misleading, or inaccurate because of a code change in a Pull Request.
+You compare a code change against a documentation sentence to check if the documentation is now factually outdated.
 
-Guidelines:
-- Return is_drift=true ONLY if the documentation states a specific fact, default value, flag, or signature that has now changed.
-- If the documentation is just a general conceptual description that remains true despite the code change, return is_drift=false.
-- Respond ONLY with valid JSON conforming to this schema:
+Rules:
+1. If the documentation mentions an old value (e.g. '30 seconds') but the code changed it (e.g. to '60'), this is DRIFT: return {"is_drift": true, ...}.
+2. If the documentation mentions an old flag (e.g. '--legacy-auth') or deleted function, this is DRIFT: return {"is_drift": true, ...}.
+3. If the documentation does not contradict the code change, return {"is_drift": false, ...}.
+
+Always respond in valid JSON format:
 {
   "is_drift": boolean,
   "confidence": float (between 0.0 and 1.0),
-  "reasoning": "Concise 1-sentence explanation of why this is or is not drift",
+  "reasoning": "1-sentence explanation of why this is or is not drift",
   "suggested_action": "Specific edit instruction if drifted"
 }"""
 
@@ -68,15 +69,9 @@ class SemanticVerifier:
             diff_summary = f"Renamed from '{change.old_name}' to '{change.new_name}'"
 
         user_content = (
-            f"CODE CHANGE:\n"
-            f"- File: {change.file}:{change.line}\n"
-            f"- Change Type: {change.change_type}\n"
-            f"- Name: {change.name}\n"
-            f"- Details: {diff_summary}\n\n"
-            f"DOCUMENTATION CONTEXT:\n"
-            f"- File: {match.file_path}:{match.line_number}\n"
-            f"- Text: \"{match.sentence}\"\n\n"
-            f"Does this documentation sentence contain factually outdated information based on this code change?"
+            f"Code Change: Identifier '{change.name}' {diff_summary} in {change.file}:{change.line}.\n"
+            f"Documentation Sentence: \"{match.sentence}\"\n\n"
+            f"Does this documentation sentence contain factually outdated information based on this code change? Respond in JSON:"
         )
 
         messages = [
@@ -98,3 +93,4 @@ class SemanticVerifier:
             )
         except Exception:
             return None
+

@@ -13,14 +13,15 @@ from detectors import CodeChange
 from .ollama_client import OllamaClient
 
 
-SYSTEM_PROMPT = """You are an expert technical writer and software documentation editor.
-Your job is to rewrite a documentation sentence so it accurately reflects a recent code change in a Pull Request.
+SYSTEM_PROMPT = """You are an expert technical documentation editor.
+Your job is to update a single documentation sentence so it accurately reflects a code change.
 
 Strict Rules:
-1. Preserve the original author's exact tone, formatting, and markdown tags (e.g. backticks ``, bold **, list markers -).
-2. ONLY update the fact, default number, flag name, or parameter that changed in the code.
-3. Keep the sentence concise and natural.
-4. Output ONLY the rewritten sentence without quotes, explanations, or markdown code fences."""
+1. Replace ONLY the outdated value, flag name, or parameter with the new one from the code change.
+2. Preserve the author's tone, formatting, and markdown (backticks ``, bold **, list markers -).
+3. Do NOT output code blocks, markdown headers, or multiple lines.
+4. Do NOT add explanations, commentary, or filler text.
+5. Output ONLY the single updated sentence — nothing else."""
 
 
 class ProseRewriter:
@@ -48,12 +49,9 @@ class ProseRewriter:
             diff_summary = f"- Old name: {change.old_name}\n- New name: {change.new_name}"
 
         user_content = (
-            f"Original documentation sentence:\n"
-            f"\"{sentence}\"\n\n"
-            f"Code Change in {change.file}:{change.line} ({change.change_type}):\n"
-            f"- Identifier: {change.name}\n"
-            f"{diff_summary}\n\n"
-            f"Updated sentence:"
+            f"Original sentence: \"{sentence}\"\n"
+            f"Code Change: '{change.name}' {diff_summary} in {change.file}:{change.line}.\n"
+            f"Write ONLY the corrected sentence (no code blocks, no extra lines):"
         )
 
         messages = [
@@ -65,9 +63,19 @@ class ProseRewriter:
         if not rewritten:
             return None
 
-        # Clean up any surrounding quotes or backticks if LLM added them
+        # Clean up surrounding quotes the LLM may have added
         cleaned = rewritten.strip()
         if (cleaned.startswith('"') and cleaned.endswith('"')) or (cleaned.startswith("'") and cleaned.endswith("'")):
             cleaned = cleaned[1:-1].strip()
 
+        # If LLM returned a code block, extract first usable line
+        if "```" in cleaned:
+            lines = [ln for ln in cleaned.splitlines() if ln.strip() and not ln.strip().startswith("```")]
+            cleaned = lines[0].strip() if lines else ""
+
+        # If LLM returned multiple lines, take only the first (the sentence itself)
+        if "\n" in cleaned:
+            cleaned = cleaned.splitlines()[0].strip()
+
         return cleaned if cleaned else None
+
