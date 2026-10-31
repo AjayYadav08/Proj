@@ -1,0 +1,71 @@
+name: Documentation Drift Detection
+
+on:
+  pull_request:
+    branches: [ main, master ]
+    types: [ opened, synchronize, reopened ]
+
+jobs:
+  check-documentation-drift:
+    name: Check Documentation Drift
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history so base and head SHAs are accessible for git diff
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          if [ -f doc-drift-detector/requirements.txt ]; then
+            pip install -r doc-drift-detector/requirements.txt
+          fi
+
+      - name: Run Documentation Drift Detector
+        id: drift_check
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          
+          echo "Comparing PR Base ($BASE_SHA) with Head ($HEAD_SHA)..."
+
+          # 1. Output GitHub Workflow Command Annotations (inline in PR files)
+          python3 doc-drift-detector/drift_detector.py \
+            --base "$BASE_SHA" \
+            --head "$HEAD_SHA" \
+            --format github || true
+
+          # 2. Generate Markdown Summary for PR Job Summary
+          python3 doc-drift-detector/drift_detector.py \
+            --base "$BASE_SHA" \
+            --head "$HEAD_SHA" \
+            --format markdown >> $GITHUB_STEP_SUMMARY || true
+
+          # 3. Generate JSON report artifact
+          python3 doc-drift-detector/drift_detector.py \
+            --base "$BASE_SHA" \
+            --head "$HEAD_SHA" \
+            --format json \
+            --output drift-report.json || true
+
+          # 4. Enforce check: Fail job if high-confidence documentation drift exists
+          python3 doc-drift-detector/drift_detector.py \
+            --base "$BASE_SHA" \
+            --head "$HEAD_SHA" \
+            --fail-on high
+
+      - name: Upload Drift Report Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: doc-drift-report
+          path: drift-report.json
+          if-no-files-found: ignore
+
