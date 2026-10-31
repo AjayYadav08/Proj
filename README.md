@@ -41,6 +41,11 @@ Documentation silently drifts whenever code changes in a Pull Request:
 ```text
 doc-drift-detector/
 ├── drift_detector.py                  # Main CLI entrypoint
+├── ai/
+│   ├── __init__.py                    # AI package exports
+│   ├── ollama_client.py               # Zero-dependency local Ollama REST client
+│   ├── semantic_verifier.py           # Layer 2: LLM reasoning verification
+│   └── prose_rewriter.py              # Layer 3: Natural prose rewriting
 ├── detectors/
 │   ├── __init__.py                    # CodeChange data model & detector exports
 │   ├── default_value.py               # Detects changed default values & constants
@@ -50,14 +55,14 @@ doc-drift-detector/
 ├── utils/
 │   ├── __init__.py
 │   ├── diff_parser.py                 # Unified git diff parser with line tracking
-│   ├── doc_finder.py                  # Doc discovery, name normalizer & drift engine
+│   ├── doc_finder.py                  # Doc discovery, name normalizer, drift & auto-fix engine
 │   └── reporter.py                    # Colored terminal, JSON & GitHub action reporter
 ├── .github/workflows/
 │   └── doc-drift.yml                  # Ready-to-use GitHub Action workflow
 ├── requirements.txt                   # Dependencies
 ├── README.md                          # Documentation
 └── tests/
-    └── test_basic.py                  # Complete test suite
+    └── test_basic.py                  # Complete test suite (15 passing tests)
 ```
 
 ---
@@ -103,6 +108,9 @@ python drift_detector.py --base main --head HEAD --output report.json
 | `--format` | `choice` | `text` | Output format: `text`, `json`, `github`, or `markdown` |
 | `--json` | `flag` | `False` | Shorthand for `--format json` |
 | `--output` | `path` | `None` | File path to write the formatted report |
+| `--ai` | `flag` | `False` | Enable local Ollama AI hybrid verification & prose rewriting |
+| `--ai-model` | `str` | `auto` | Ollama model to use (e.g. `llama3.2:1b`, `llama3.2`, `mistral`) |
+| `--fix`, `--autofix` | `flag` | `False` | Automatically rewrite outdated documentation files on disk |
 | `--min-confidence` | `choice` | `medium`| Minimum issue confidence to report: `high`, `medium`, or `low` |
 | `--fail-on` | `choice` | `high` | Exit with code `1` if drift of this level is found: `high`, `medium`, `any`, `none` |
 | `-v`, `--verbose` | `flag` | `False` | Enable step-by-step pipeline logging |

@@ -82,12 +82,14 @@ def main():
         print(f"  {line}")
     print("  ... [truncated for display]")
 
-    print("\n2. Executing DocDrift Detection Pipeline...")
+    use_ai = "--ai" in sys.argv
+    print(f"\n2. Executing DocDrift Detection Pipeline {'[🤖 AI + Static Hybrid Mode]' if use_ai else '[⚡ Static Mode]'}...")
     result = execute_drift_detection(
         diff_text=SAMPLE_PR_DIFF,
         repo_dir=str(demo_dir),
         docs_dir=str(docs_dir),
         min_confidence="medium",
+        use_ai=use_ai,
         verbose=False
     )
 

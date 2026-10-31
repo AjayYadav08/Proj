@@ -51,6 +51,9 @@ class ConsolidatedIssue:
         self.old_name = primary.old_name
         self.new_name = primary.new_name
         self.suggestion = primary.suggestion
+        self.ai_verified = primary.details.get("ai_verified", False)
+        self.ai_reasoning = primary.details.get("ai_reasoning")
+        self.ai_model = primary.details.get("ai_model")
         # Track all contributing code culprits: list of (file, line, name, diff_str)
         self.code_culprits: List[Tuple[str, int, str, str]] = [
             (primary.code_file, primary.code_line, primary.code_name, self._format_diff(primary))
@@ -181,6 +184,10 @@ class DriftReporter:
         for idx, item in enumerate(consolidated, start=1):
             is_high = item.confidence == "HIGH"
             badge = self._c("[HIGH - MERGE BLOCKER]", Colors.RED + Colors.BOLD) if is_high else self._c("[MEDIUM - WARNING]", Colors.YELLOW + Colors.BOLD)
+            if item.ai_verified:
+                ai_badge = self._c(f"🤖 AI VERIFIED ({item.ai_model or 'Ollama'})", Colors.CYAN + Colors.BOLD)
+                badge = f"{badge}  {ai_badge}"
+
             type_title = {
                 "DEFAULT_VALUE_CHANGED": "Outdated Default Value",
                 "FLAG_RENAMED": "Renamed Flag / Config Key",
@@ -191,7 +198,7 @@ class DriftReporter:
             border_c = Colors.RED if is_high else Colors.YELLOW
 
             out.append("")
-            out.append(self._c(f"╭─ Issue #{idx}: {type_title}  {badge} ", border_c) + self._c("─" * 20, border_c))
+            out.append(self._c(f"╭─ Issue #{idx}: {type_title}  {badge} ", border_c) + self._c("─" * 15, border_c))
             out.append(self._c("│", border_c) + f"  {self._c('📄 Doc Location :', Colors.BOLD)} {item.doc_file}:{item.doc_line}")
             out.append(self._c("│", border_c))
 
@@ -214,6 +221,10 @@ class DriftReporter:
                 out.append(self._c("│", border_c) + f"  {self._c('✅ Proposed Fix :', Colors.GREEN + Colors.BOLD)} \"{proposed_highlighted}\"")
             elif item.issue_type == "FEATURE_REMOVED":
                 out.append(self._c("│", border_c) + f"  {self._c('✅ Proposed Fix :', Colors.GREEN + Colors.BOLD)} [Remove section or add deprecation notice]")
+
+            # Display AI Reasoning if available
+            if item.ai_reasoning:
+                out.append(self._c("│", border_c) + f"  {self._c('🤖 AI Analysis  :', Colors.CYAN + Colors.BOLD)} \"{item.ai_reasoning}\"")
 
             out.append(self._c("│", border_c))
 

@@ -23,6 +23,7 @@ import sys
 from typing import List, Optional, Set
 
 # Local project imports
+from ai import OllamaClient, SemanticVerifier, ProseRewriter
 from detectors import (
     CodeChange,
     detect_default_values,
@@ -36,6 +37,7 @@ from utils.doc_finder import (
     search_name_in_docs,
     detect_drift_for_change,
     apply_autofixes,
+    DocMatch,
     DriftIssue,
 )
 from utils.reporter import DriftReporter
@@ -71,10 +73,13 @@ def execute_drift_detection(
     repo_dir: str = ".",
     docs_dir: Optional[str] = None,
     min_confidence: str = "medium",
+    use_ai: bool = False,
+    ai_model: Optional[str] = None,
     verbose: bool = False
 ) -> PipelineResult:
     """
-    Executes the full 5-step documentation drift detection pipeline.
+    Executes the full documentation drift detection pipeline.
+    Supports Hybrid mode: Static AST analysis + local Ollama LLM verification.
     """
     # -------------------------------------------------------------
     # STEP 1: PARSE PR DIFF
@@ -171,6 +176,50 @@ def execute_drift_detection(
             if issue_level >= min_level:
                 drift_issues.append(issue)
 
+    # -------------------------------------------------------------
+    # STEP 4B: OLLAMA AI HYBRID ENHANCEMENT (VERIFY & REWRITE)
+    # -------------------------------------------------------------
+    if use_ai:
+        ollama = OllamaClient()
+        if ollama.is_available():
+            active_model = ai_model or ollama.get_preferred_model()
+            if verbose:
+                print(f"[AI HYBRID] Connected to local Ollama (model: {active_model}). Verifying candidates...", file=sys.stderr)
+
+            verifier = SemanticVerifier(ollama)
+            rewriter = ProseRewriter(ollama)
+            change_by_name = {c.name: c for c in code_changes}
+
+            for issue in drift_issues:
+                rel_change = change_by_name.get(issue.code_name)
+                if not rel_change and code_changes:
+                    rel_change = code_changes[0]
+
+                if rel_change:
+                    match_obj = DocMatch(
+                        file_path=issue.doc_file,
+                        line_number=issue.doc_line,
+                        line_content=issue.doc_sentence,
+                        sentence=issue.doc_sentence,
+                        matched_variant=issue.code_name
+                    )
+                    # 1. AI Verification
+                    ai_verif = verifier.verify_candidate(rel_change, match_obj, model=active_model)
+                    if ai_verif:
+                        issue.details["ai_verified"] = True
+                        issue.details["ai_model"] = active_model
+                        issue.details["ai_reasoning"] = ai_verif.reasoning
+                        if ai_verif.suggested_action:
+                            issue.suggestion = ai_verif.suggested_action
+
+                    # 2. AI Prose Rewriting
+                    ai_rewritten = rewriter.rewrite_sentence(issue.doc_sentence, rel_change, model=active_model)
+                    if ai_rewritten and ai_rewritten != issue.doc_sentence:
+                        issue.proposed_sentence = ai_rewritten
+                        issue.details["ai_rewritten"] = True
+        elif verbose:
+            print("[AI Warning] Ollama daemon unreachable at http://localhost:11434. Fallback to static engine.", file=sys.stderr)
+
     if verbose:
         print(f"  -> Identified {len(drift_issues)} documentation drift issues.", file=sys.stderr)
 
@@ -258,6 +307,17 @@ def main():
         help="Automatically apply proposed fixes directly into the documentation files."
     )
     parser.add_argument(
+        "--ai",
+        action="store_true",
+        help="Enable local Ollama AI hybrid verification and prose rewriting."
+    )
+    parser.add_argument(
+        "--ai-model",
+        type=str,
+        default=None,
+        help="Specify Ollama model name (e.g. llama3.2:1b). Auto-detected if omitted."
+    )
+    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Enable detailed debug logging."
@@ -289,6 +349,8 @@ def main():
         repo_dir=args.repo_dir,
         docs_dir=args.docs_dir,
         min_confidence=args.min_confidence,
+        use_ai=args.ai,
+        ai_model=args.ai_model,
         verbose=args.verbose
     )
 

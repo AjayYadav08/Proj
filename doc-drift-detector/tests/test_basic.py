@@ -340,3 +340,39 @@ def test_end_to_end_pipeline(tmp_path):
     assert "60 seconds" in updated_doc
     assert "--new-flag" in updated_doc
 
+
+def test_ollama_ai_integration():
+    from ai import OllamaClient, SemanticVerifier, ProseRewriter
+    client = OllamaClient()
+    if client.is_available():
+        models = client.list_models()
+        assert len(models) >= 0
+        verifier = SemanticVerifier(client)
+        rewriter = ProseRewriter(client)
+
+        change = CodeChange(
+            change_type="DEFAULT_VALUE_CHANGED",
+            name="DEFAULT_TIMEOUT",
+            file="config.py",
+            line=10,
+            old_value="30",
+            new_value="60"
+        )
+        match = DocMatch(
+            file_path="docs/guide.md",
+            line_number=5,
+            line_content="The default timeout is 30 seconds.",
+            sentence="The default timeout is 30 seconds.",
+            matched_variant="default timeout"
+        )
+        res = verifier.verify_candidate(change, match)
+        if res:
+            assert res.is_drift is True
+            assert isinstance(res.reasoning, str)
+            assert len(res.reasoning) > 0
+
+        rewritten = rewriter.rewrite_sentence(match.sentence, change)
+        if rewritten:
+            assert isinstance(rewritten, str)
+            assert len(rewritten) > 0
+
