@@ -35,6 +35,7 @@ from utils.doc_finder import (
     find_documentation_files,
     search_name_in_docs,
     detect_drift_for_change,
+    apply_autofixes,
     DriftIssue,
 )
 from utils.reporter import DriftReporter
@@ -251,6 +252,12 @@ def main():
         help="Fail with exit code 1 if drift of this confidence level or higher is detected (default: high)."
     )
     parser.add_argument(
+        "--fix", "--autofix",
+        dest="fix",
+        action="store_true",
+        help="Automatically apply proposed fixes directly into the documentation files."
+    )
+    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Enable detailed debug logging."
@@ -308,6 +315,19 @@ def main():
 
     # Print to stdout
     print(output_content)
+
+    # If --fix / --autofix is requested, apply fixes in-place
+    if args.fix:
+        fixed_count, fix_logs = apply_autofixes(result.drift_issues, repo_dir=args.repo_dir)
+        print("\n" + "=" * 74)
+        if fixed_count > 0:
+            print(f" ✨ AUTO-FIX APPLIED: Successfully updated {fixed_count} documentation issue(s)!")
+            for log in fix_logs:
+                print(f"    • {log}")
+        else:
+            print(" ℹ️  No auto-fixable issues found (some issues require manual restructuring).")
+        print("=" * 74)
+        sys.exit(0)
 
     # If --output file specified, save report
     if args.output:

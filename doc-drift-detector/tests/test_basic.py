@@ -330,3 +330,13 @@ def test_end_to_end_pipeline(tmp_path):
     assert '"summary"' in json_report
     assert '"drift_issues"' in json_report
 
+    # Test auto-fix functionality
+    from utils.doc_finder import apply_autofixes
+    fixed_count, logs = apply_autofixes(result.drift_issues, repo_dir=str(repo_dir))
+    assert fixed_count >= 1
+
+    # Verify that the documentation file on disk was modified with the fix
+    updated_doc = doc_file.read_text(encoding="utf-8")
+    assert "60 seconds" in updated_doc
+    assert "--new-flag" in updated_doc
+

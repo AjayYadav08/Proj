@@ -498,3 +498,63 @@ def detect_drift_for_change(
 
     return issues
 
+
+def apply_autofixes(issues: List[DriftIssue], repo_dir: str = ".") -> Tuple[int, List[str]]:
+    """
+    Applies proposed fixes directly to the documentation files on disk.
+    Returns (num_fixed, list_of_log_messages).
+    """
+    from collections import defaultdict
+    fixed_count = 0
+    logs: List[str] = []
+
+    files_map = defaultdict(list)
+    for issue in issues:
+        if issue.proposed_sentence and issue.doc_file:
+            files_map[issue.doc_file].append(issue)
+
+    repo_path = Path(repo_dir)
+
+    for rel_path, file_issues in files_map.items():
+        file_path = repo_path / rel_path
+        if not file_path.exists():
+            continue
+
+        try:
+            content = file_path.read_text(encoding="utf-8")
+            lines = content.splitlines(keepends=True)
+            modified = False
+
+            for issue in file_issues:
+                line_idx = issue.doc_line - 1
+                if 0 <= line_idx < len(lines):
+                    line_str = lines[line_idx]
+                    if issue.doc_sentence in line_str:
+                        new_line = line_str.replace(issue.doc_sentence, issue.proposed_sentence, 1)
+                        if new_line != line_str:
+                            lines[line_idx] = new_line
+                            modified = True
+                            fixed_count += 1
+                            logs.append(f"Fixed {rel_path}:{issue.doc_line} -> {issue.suggestion}")
+                    elif issue.old_value and issue.new_value:
+                        new_line = re.sub(rf"\b{re.escape(issue.old_value)}\b", issue.new_value, line_str, count=1)
+                        if new_line != line_str:
+                            lines[line_idx] = new_line
+                            modified = True
+                            fixed_count += 1
+                            logs.append(f"Fixed {rel_path}:{issue.doc_line} -> {issue.suggestion}")
+                    elif issue.old_name and issue.new_name:
+                        new_line = line_str.replace(issue.old_name, issue.new_name, 1)
+                        if new_line != line_str:
+                            lines[line_idx] = new_line
+                            modified = True
+                            fixed_count += 1
+                            logs.append(f"Fixed {rel_path}:{issue.doc_line} -> {issue.suggestion}")
+
+            if modified:
+                file_path.write_text("".join(lines), encoding="utf-8")
+        except Exception as e:
+            logs.append(f"Error modifying {rel_path}: {e}")
+
+    return fixed_count, logs
+

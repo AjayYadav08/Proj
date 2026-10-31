@@ -20,6 +20,7 @@ ROOT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT_DIR / "doc-drift-detector"))
 
 from drift_detector import execute_drift_detection
+from utils.doc_finder import apply_autofixes
 from utils.reporter import DriftReporter
 
 
@@ -99,6 +100,23 @@ def main():
 
     print("\n3. Generated Report:")
     print(reporter.to_text())
+
+    # Check if user requested auto-fix demo
+    if "--fix" in sys.argv:
+        print("\n" + "=" * 70)
+        print(" 🛠️  APPLYING AUTO-FIX (--fix mode)")
+        print("=" * 70)
+        num_fixed, logs = apply_autofixes(result.drift_issues, repo_dir=str(demo_dir))
+        print(f"✅ Successfully auto-fixed {num_fixed} issue(s) directly in the documentation files:")
+        for log in logs:
+            print(f"   • {log}")
+
+        print("\n📄 Updated documentation file content preview:")
+        print("-" * 50)
+        print(demo_doc.read_text(encoding="utf-8"))
+        print("-" * 50)
+    else:
+        print("\n💡 Tip: Run `python3 run_demo.py --fix` to see DocDrift automatically correct the documentation files on disk!")
 
     # Cleanup demo files
     try:
