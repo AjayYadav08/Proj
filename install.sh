@@ -42,11 +42,8 @@ echo "  ✔ pip verified"
 echo "  → Installing docdrift CLI..."
 
 # Install globally / user environment
-pip3 install --quiet \
-  "git+${REPO}#subdirectory=${SUBDIR}" \
-  2>/dev/null || \
-pip3 install --quiet --break-system-packages \
-  "git+${REPO}#subdirectory=${SUBDIR}"
+pip3 install --quiet doc-drift-detector 2>/dev/null || \
+pip3 install --quiet --break-system-packages doc-drift-detector
 
 echo "${GREEN}  ✔ docdrift CLI installed globally${NC}"
 
@@ -83,7 +80,7 @@ jobs:
 
       - name: Install DocDrift
         run: |
-          pip install "git+https://github.com/AjayYadav08/Proj.git#subdirectory=doc-drift-detector"
+          pip install doc-drift-detector
 
       - name: Run Documentation Drift Detector
         run: |

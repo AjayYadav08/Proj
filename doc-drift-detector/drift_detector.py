@@ -69,7 +69,7 @@ jobs:
 
       - name: Install DocDrift
         run: |
-          pip install "git+https://github.com/AjayYadav08/Proj.git#subdirectory=doc-drift-detector"
+          pip install doc-drift-detector
 
       - name: Run Documentation Drift Detector
         run: |
