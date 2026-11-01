@@ -44,6 +44,65 @@ from utils.reporter import DriftReporter
 
 
 # Typed container for analysis results
+GITHUB_WORKFLOW_TEMPLATE = """name: Documentation Drift Detection
+
+on:
+  pull_request:
+    branches: [ main, master ]
+    types: [ opened, synchronize, reopened ]
+
+jobs:
+  check-documentation-drift:
+    name: Check Documentation Drift
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install DocDrift
+        run: |
+          pip install "git+https://github.com/AjayYadav08/Proj.git#subdirectory=doc-drift-detector"
+
+      - name: Run Documentation Drift Detector
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          echo "Checking documentation drift between $BASE_SHA and $HEAD_SHA..."
+          
+          # Annotate changed files on GitHub PR
+          docdrift --base "$BASE_SHA" --head "$HEAD_SHA" --format github || true
+          
+          # Add markdown summary to PR check results
+          docdrift --base "$BASE_SHA" --head "$HEAD_SHA" --format markdown >> $GITHUB_STEP_SUMMARY || true
+          
+          # Block merge if high confidence drift is found
+          docdrift --base "$BASE_SHA" --head "$HEAD_SHA" --fail-on high
+"""
+
+
+def init_github_workflow(repo_dir: str = ".") -> bool:
+    repo_path = Path(repo_dir).resolve()
+    workflow_dir = repo_path / ".github" / "workflows"
+    workflow_file = workflow_dir / "doc-drift.yml"
+    
+    workflow_dir.mkdir(parents=True, exist_ok=True)
+    workflow_file.write_text(GITHUB_WORKFLOW_TEMPLATE, encoding="utf-8")
+    print(f"✔ Successfully configured GitHub Actions workflow at:\n  {workflow_file}")
+    print("\nNext step: Commit and push to your repo:")
+    print("  git add .github/workflows/doc-drift.yml")
+    print("  git commit -m 'ci: enable automatic documentation drift checks'")
+    print("  git push")
+    return True
+
+
 class PipelineResult:
     def __init__(
         self,
@@ -308,12 +367,26 @@ def main():
         help="Specify Ollama model name (e.g. llama3.2:1b). Auto-detected if omitted."
     )
     parser.add_argument(
+        "--init",
+        action="store_true",
+        help="Set up GitHub Actions automatic workflow (.github/workflows/doc-drift.yml) in the current repo."
+    )
+    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Enable detailed debug logging."
     )
 
+    # Allow convenient shortcut: `docdrift init`
+    if len(sys.argv) > 1 and sys.argv[1] == "init":
+        init_github_workflow(".")
+        sys.exit(0)
+
     args = parser.parse_args()
+
+    if args.init:
+        init_github_workflow(args.repo_dir)
+        sys.exit(0)
 
     # Determine diff source
     diff_text = ""
